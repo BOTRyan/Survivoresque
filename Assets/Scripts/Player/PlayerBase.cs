@@ -1,6 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class PlayerBase : MonoBehaviour
 {
@@ -14,48 +16,66 @@ public class PlayerBase : MonoBehaviour
 
     // Movement/Rotation
     public static float movementSmoothing = .05f;
-    private Vector3 velocity = Vector3.zero;
+    public static Vector3 velocity = Vector3.zero;
     public static Vector2 moveInput;
-    public static float faceAngle = 0;
     public static Vector2 lookInput;
 
     // Components
-    public static PlayerInputs playerInputs;
-    private Rigidbody2D rb2D;
+    public static PlayerControls playerControls;
+    public static PlayerInput playerInput;
+    public static Rigidbody2D rb2D;
+    public static Camera mainCam;
+
+    // Utilites
+    public static bool isGamepad;
 
     private void Awake()
     {
         rb2D = GetComponent<Rigidbody2D>();
-        playerInputs = new PlayerInputs();
-        playerInputs.PlayerMap.Enable();
+        playerControls = new PlayerControls();
+        playerControls.Enable();
+        playerInput = GetComponent<PlayerInput>();
+        mainCam = Camera.main;
     }
 
     void Update()
     {
         // Movement
-        moveInput = playerInputs.PlayerMap.Move.ReadValue<Vector2>();
+        moveInput = playerControls.PlayerMap.Move.ReadValue<Vector2>();
 
         // Rotation
-        lookInput = playerInputs.PlayerMap.Look.ReadValue<Vector2>();
+        lookInput = playerControls.PlayerMap.Look.ReadValue<Vector2>();
     }
 
     private void FixedUpdate()
     {
         // Movement
-        Vector2 characterMovement = new Vector2(moveInput.x, moveInput.y * -1);
+        Vector2 characterMovement = new Vector2(moveInput.x, moveInput.y);
         characterMovement = characterMovement.normalized;
         Move(characterMovement * Time.fixedDeltaTime * baseSpeed);
 
-        // Rotation
-        float aimAngle = (Mathf.Atan2(lookInput.x, lookInput.y) * Mathf.Rad2Deg) - 90;
-        if (lookInput.x != 0 || lookInput.y != 0)
+        if (isGamepad)
         {
-            transform.rotation = Quaternion.AngleAxis(aimAngle, Vector3.forward);
+            // Rotation Gamepad
+            if (lookInput.x != 0 || lookInput.y != 0)
+            {
+                float aimAngle2 = (Mathf.Atan2(lookInput.y, lookInput.x) * Mathf.Rad2Deg);
+                transform.rotation = Quaternion.AngleAxis(aimAngle2, Vector3.forward);
+            }
+            else
+            {
+                float faceAngle = (Mathf.Atan2(moveInput.y, moveInput.x) * Mathf.Rad2Deg);
+                transform.rotation = Quaternion.Euler(new Vector3(0, 0, faceAngle));
+            }
         }
         else
         {
-            faceAngle = (Mathf.Atan2(moveInput.x, moveInput.y) * Mathf.Rad2Deg) - 90;
-            transform.rotation = Quaternion.Euler(new Vector3(0, 0, faceAngle));
+            // Rotation Mouse
+            Vector3 mousePos = mainCam.ScreenToWorldPoint(Mouse.current.position.ReadValue());
+            Vector3 rotation = mousePos - transform.position;
+            float rotZ = Mathf.Atan2(rotation.y, rotation.x) * Mathf.Rad2Deg;
+
+            transform.rotation = Quaternion.Euler(0, 0, rotZ);
         }
     }
 
@@ -64,5 +84,10 @@ public class PlayerBase : MonoBehaviour
         Vector3 targetVelocity = new Vector2(move.x * 10f, move.y * 10f);
 
         rb2D.velocity = Vector3.SmoothDamp(rb2D.velocity, targetVelocity, ref velocity, movementSmoothing);
+    }
+
+    public void OnDeviceChange(PlayerInput pi)
+    {
+        isGamepad = pi.currentControlScheme.Equals("Gamepad") ? true : false;
     }
 }
